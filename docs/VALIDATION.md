@@ -40,6 +40,13 @@ feedback, not merely by observing a changed monitor mode. Restoration compared
 saved modes, refresh-rate mode, layout, scaling, transforms, primary display and
 color settings. Independent recovery was armed but not needed in the passing runs.
 
+## Hardware-free checks
+
+The regression suite and lint checks pass on Fedora 45 and stock Ubuntu 24.04,
+including Ubuntu's LuaJIT 2.1 build and GLib 2.80. These checks cover command exit
+statuses, signals, timeouts and output capture without display hardware; they do
+not establish Ubuntu desktop or monitor compatibility.
+
 ## Limits
 
 - Keep the pointer on the gaming LG through launch and reconnection. Automatic

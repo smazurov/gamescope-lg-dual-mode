@@ -66,6 +66,11 @@ int fsync(int);
 unsigned int umask(unsigned int);
 char *realpath(const char *, char *);
 void free(void *);
+typedef struct _IO_FILE FILE;
+FILE *popen(const char *, const char *);
+size_t fread(void *, size_t, size_t, FILE *);
+int ferror(FILE *);
+int pclose(FILE *);
 ]]
 -- Only the sanitized host watcher needs GIO. Do not dlopen Steam's GLib/GIO
 -- into Gamescope while running the embedded startup hook.
@@ -110,17 +115,32 @@ local function command_text(arguments)
     for i, value in ipairs(arguments) do quoted[i] = shell_quote(value) end
     return table.concat(quoted, " ")
 end
-local function exit_status(ok, _, code)
-    if type(ok) == "number" then return math.floor(ok / 256) end
+local function exit_status(ok, kind, code)
+    if type(ok) == "number" then
+        if ok < 0 then return 1 end
+        local signal = ok % 128
+        if signal ~= 0 then return 128 + signal end
+        return math.floor(ok / 256) % 256
+    end
+    if not ok and kind == "signal" then return 128 + (code or 0) end
     return ok and 0 or (code or 1)
 end
 local function run(arguments, seconds)
     local command = command_text(arguments)
     if seconds then command = "timeout " .. seconds .. "s " .. command end
-    local pipe, message = io.popen(command .. " 2>&1", "r")
-    if not pipe then return 1, message or "Could not run command" end
-    local output = pipe:read("*a")
-    local status = exit_status(pipe:close())
+    -- Lua 5.1's pipe:close() can report stream success instead of child status.
+    -- POSIX pclose supplies the actual wait status on every supported LuaJIT build.
+    local pipe = C.popen(command .. " 2>&1", "r")
+    if pipe == nil then return 1, "Could not run command" end
+    local chunks, buffer = {}, ffi.new("char[4096]")
+    while true do
+        local count = tonumber(C.fread(buffer, 1, 4096, pipe))
+        if count > 0 then chunks[#chunks + 1] = ffi.string(buffer, count) end
+        if count < 4096 then break end
+    end
+    local read_failed = C.ferror(pipe) ~= 0
+    local status, output = exit_status(C.pclose(pipe)), table.concat(chunks)
+    if read_failed then return 1, output .. "\nCould not read command output" end
     return status, output
 end
 local function executable(name)

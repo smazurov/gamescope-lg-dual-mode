@@ -254,6 +254,35 @@ test("both Lua wait-status conventions are normalized", function()
     equal(M.exit_status(true, "exit", 0), 0); equal(M.exit_status(nil, "exit", 7), 7)
     local code = M.run({ "/bin/sh", "-c", "exit 7" }); equal(code, 7)
 end)
+test("command status does not depend on Lua 5.1 pipe-close results", function()
+    local original = io.popen
+    io.popen = function(command, mode) -- luacheck: ignore 122
+        local pipe = assert(original(command, mode))
+        return {
+            read = function(_, ...) return pipe:read(...) end,
+            close = function() pipe:close(); return true end,
+        }
+    end
+    local ok, code, output = pcall(M.run, { "/bin/sh", "-c", "printf output; exit 7" })
+    io.popen = original -- luacheck: ignore 122
+    assert(ok, code); equal(code, 7); equal(output, "output")
+end)
+test("signals and timeouts cannot be reported as successful commands", function()
+    equal(M.exit_status(9), 137)
+    equal(M.exit_status(nil, "signal", 9), 137)
+    equal(M.exit_status(-1), 1)
+    local code = M.run({ "/bin/sh", "-c", "kill -KILL $$" })
+    equal(code, 137)
+    code = M.run({ "/bin/sh", "-c", "sleep 1" }, 0.05)
+    equal(code, 124)
+end)
+test("command capture preserves multi-chunk and binary output", function()
+    local expected = string.rep("a", 10000)
+    local code, output = M.run({ "/usr/bin/printf", "%s", expected })
+    equal(code, 0); equal(output, expected)
+    code, output = M.run({ "/usr/bin/printf", "a\\000b" })
+    equal(code, 0); equal(output, "a\0b")
+end)
 test("shell quoting does not execute embedded shell syntax", function()
     local input = "spaces ' quotes; $(echo WRONG) % $dollar"
     local code, output = M.run({ "/usr/bin/printf", "%s", input })
