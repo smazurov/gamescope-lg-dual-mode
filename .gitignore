@@ -1,0 +1,5 @@
+# Local build and diagnostic outputs.
+.build-deps/
+dist/
+*.log
+session.gv

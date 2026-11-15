@@ -1,0 +1,24 @@
+name: Hardware-free tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y luajit libglib2.0-0t64 lua-check shellcheck make
+      - name: Test and lint without display hardware
+        run: make check
